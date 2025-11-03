@@ -10,35 +10,41 @@
 
 
 void idle_thread() {
-    set_interrupt_state(true);
+    set_interrupt_state(true); // ensure idle thread interrupt enabled
     while (true) {
+        // hlt: stop CPU until next interrupt (like clock)
+        // so idle loop not 100% CPU
         asm volatile(
-            "sti\n"
+            "sti\n" // (Original)
             "hlt\n"
         );
-        yield();
+        
+        // (remove yield();)
+        // clock_handler will handle hlt wakeup
+        // check cfs_task_count and call schedule()
     }
 }
 
 
 static void user_init_thread() {
-    u32 counter = 0;
-    while (true) {
-        sleep(1000);
-    }
 }
 
 
 void init_thread() {
-    char temp[100];
-    task_to_user_mode(user_init_thread);
-}
+    // char temp[100];
+    // task_to_user_mode(user_init_thread);    
+
+    set_interrupt_state(true);
+    while (true) {
+        LOGK("init thread\n");
+    }
+} 
 
 
 void test_thread() {
     set_interrupt_state(true);
     u32 count = 0;
     while (true) {
-        sleep(2000);
+        LOGK("test thread\n");
     }
 }
