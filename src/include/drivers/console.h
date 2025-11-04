@@ -33,7 +33,6 @@
 
 void console_init();
 void console_clear();
-int32 console_write(const char *buf, u32 count);
 
 
 

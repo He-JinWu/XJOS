@@ -40,6 +40,7 @@ typedef unsigned long long u64;
 typedef int32 pid_t;
 typedef u32 time_t;
 typedef u32 idx_t;
+typedef int32 dev_t;
 
 typedef int32 fd_t;
 typedef enum {

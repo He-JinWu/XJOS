@@ -2,6 +2,7 @@
 #include <hardware/io.h>
 #include <xjos/interrupt.h>
 #include <libc/string.h>
+#include <drivers/device.h>
 
 static void get_screen();
 static void set_screen();
@@ -70,11 +71,6 @@ static void set_cursor() {
     outb(CRT_DATA_REG, ((pos - MEM_BASE) >> 9) & 0xff);
     outb(CRT_ADDR_REG, CRT_CURSOR_L);
     outb(CRT_DATA_REG, ((pos - MEM_BASE) >> 1) & 0xff);
-}
-
-
-void console_init() {
-    console_clear();
 }
 
 
@@ -151,7 +147,9 @@ static void srcoll_up() {
 extern void start_beep();
  
 
-int32 console_write(const char *buf, u32 count) {
+int32 console_write(void *dev, char *buf, u32 count) {
+    (void)dev;      // dont need *dev
+
     bool intr = interrupt_disable();            // should turn off interrupt
 
     char ch;
@@ -200,4 +198,15 @@ int32 console_write(const char *buf, u32 count) {
 
     set_interrupt_state(intr);
     return nr;
+}
+
+
+void console_init() {
+    console_clear();
+
+    device_install(
+        DEV_CHAR, DEV_CONSOLE,
+        NULL, "console", 0,
+        NULL, NULL, console_write
+    );
 }

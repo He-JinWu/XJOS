@@ -35,6 +35,34 @@ char *strcat(char *dest, const char *src) {
 }
 
 
+size_t strlcpy(char *dst, const char *src, size_t size) {
+    size_t i = 0;
+
+    if (size == 0) {
+        while (src[i] != '\0') {
+            i++;
+        }
+        return i;
+    }
+
+    // byte to byte
+    for (i = 0; i < size - 1; i++) {
+        dst[i] = src[i];
+        if (src[i] == '\0')
+            return i;       // copy done, return size
+    }
+
+    // cycle end
+    dst[i] = '\0';      // i = size - 1
+
+    // continue find src
+    while (src[i] != '\0')
+        i++;
+
+    return i;       // return size of src
+}
+
+
 size_t strlen(const char *str) {
     size_t len = 0;
 

@@ -2,7 +2,7 @@
 #include <libc/stdio.h>
 #include <drivers/console.h>
 
-
+extern int32 console_write();
 
 static char buf[1024];
 
@@ -18,7 +18,7 @@ int printk(const char *fmt,...) {
 
     va_end(args);
 
-    console_write(buf, i);
+    console_write(NULL, buf, i);
 
     return i;
 }

@@ -5,6 +5,7 @@
 #include <xjos/spinlock.h>
 #include <xjos/task.h>
 #include <xjos/fifo.h>
+#include <drivers/device.h>
 
 #define LOGK(fmt, args...) DEBUGK(fmt, ##args)
 
@@ -349,7 +350,7 @@ void keyboard_handler(int vector) {
 }
 
 
-u32 keyboard_read(char *buffer, u32 count) {
+u32 keyboard_read(void *dev, char *buffer, u32 count) {
     spin_lock(&lock);   // spin lock
     int nr = 0;
     while (nr < count) {
@@ -378,4 +379,8 @@ void keyboard_init() {
 
     set_interrupt_handler(IRQ_KEYBOARD, keyboard_handler);
     set_interrupt_mask(IRQ_KEYBOARD, true);
+
+    device_install(DEV_CHAR, DEV_KEYBOARD, 
+        NULL, "keyboard", 0, NULL, 
+        keyboard_read, NULL);
 }

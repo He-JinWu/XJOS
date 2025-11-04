@@ -27,17 +27,15 @@ void idle_thread() {
 
 
 static void user_init_thread() {
+    while (true) {
+        sleep(1000);
+    }
 }
 
 
 void init_thread() {
-    // char temp[100];
-    // task_to_user_mode(user_init_thread);    
-
-    set_interrupt_state(true);
-    while (true) {
-        LOGK("init thread\n");
-    }
+    char temp[100];
+    task_to_user_mode(user_init_thread);    
 } 
 
 
@@ -45,6 +43,6 @@ void test_thread() {
     set_interrupt_state(true);
     u32 count = 0;
     while (true) {
-        LOGK("test thread\n");
+        test();
     }
 }
