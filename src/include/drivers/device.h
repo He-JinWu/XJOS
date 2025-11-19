@@ -39,6 +39,7 @@ typedef struct request_t {
     dev_t dev;
     u32 type;
     u32 idx;
+    u32 offset;
     u32 count;
     int flags;
     u8 *buf;

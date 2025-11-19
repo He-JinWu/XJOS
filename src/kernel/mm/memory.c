@@ -33,10 +33,12 @@
 // kernel page table
 static u32 KERNEL_PAGE_TABLE[] = {
     0x2000,
-    0x3000
+    0x3000,
+    0x4000,
+    0x5000,
 };
 
-#define KERNEL_MAP_BITS 0x4000
+#define KERNEL_MAP_BITS 0x6000
 
 
 bitmap_t kernel_map;
@@ -445,7 +447,7 @@ void free_pde() {
     page_entry_t *pde = get_pde();
     
     // pde 2 - 1022
-    for (size_t didx = 2; didx < 1023; didx++) {
+    for (size_t didx = (sizeof(KERNEL_PAGE_TABLE) / 4); didx < 1023; didx++) {
         page_entry_t *dentry = &pde[didx];
         if (!dentry->present)
             continue;
@@ -482,7 +484,7 @@ page_entry_t *copy_pde() {
     // * Isolate parent and child processes
     page_entry_t *dentry;
 
-    for (size_t didx = 2; didx < 1023; didx++) {
+    for (size_t didx = ((sizeof(KERNEL_PAGE_TABLE) / 4)); didx < 1023; didx++) {
         dentry = &pde[didx];
         if (!dentry->present)
             continue;

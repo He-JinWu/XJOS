@@ -122,14 +122,14 @@ device_t *device_get(dev_t dev) {
 
 
 static void do_request(request_t *req) {
-    LOGK("dev %d do requset idx %d\n", req->dev, req->idx);
+    LOGK("dev %d do requset pba %d\n", req->dev, req->offset);
 
     switch (req->type) {
         case REQ_READ:
-            device_read(req->dev, req->buf, req->count, req->idx, req->flags);
+            device_read(req->dev, req->buf, req->count, req->offset, req->flags);
             break;
         case REQ_WRITE:
-            device_write(req->dev, req->buf, req->count, req->idx, req->flags);
+            device_write(req->dev, req->buf, req->count, req->offset, req->flags);
             break;
         default:
             panic("req type %d unknown!!!\n", req->dev);
@@ -163,20 +163,20 @@ static request_t *request_nextreq(device_t *device, request_t *req) {
 
 void device_request(dev_t dev, void *buf, u8 count, idx_t idx, int flags, u32 type) {
     device_t *device = device_get(dev);
-
     assert(device->type == DEV_BLOCK);
+
     idx_t offset = idx + device_ioctl(device->dev, DEV_CMD_SECTOR_START, 0, 0);
-    
     // get parent device, /dev/hda1 -> /dev/hda
     if (device->parent)   
         device = device_get(device->parent);
     
     request_t *req = kmalloc(sizeof(request_t));
 
-    req->dev = dev;
+    req->dev = device->dev;
     req->buf = buf;
     req->count = count;
-    req->idx = offset;
+    req->idx = idx;
+    req->offset = offset;
     req->flags = flags;
     req->type = type;
     req->task = NULL;
@@ -188,7 +188,7 @@ void device_request(dev_t dev, void *buf, u8 count, idx_t idx, int flags, u32 ty
     // req to device reqlist
     // list_pushback(&device->request_list, &req->node);
 
-    list_insert_sort(&device->request_list, &req->node, list_node_offset(request_t, node, idx));
+    list_insert_sort(&device->request_list, &req->node, list_node_offset(request_t, node, offset));
 
     if (!empty) {   // wait for device idle
         req->task = running_task();

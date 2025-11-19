@@ -7,7 +7,19 @@
 #define MEMORY_BASE 0x100000     // memory starts at 1M
 
 // kernel memory size
-#define KERNEL_MEMORY_SIZE 0x800000 // 8MB
+#define KERNEL_MEMORY_SIZE 0x1000000 // 16MB
+
+// kernel cache addr
+#define KERNEL_BUFFER_MEM 0x800000
+
+// kernel cache size
+#define KERNEL_BUFFER_SIZE 0x400000 // 4MB
+
+// kernel ramdisk addr
+#define KERNEL_RAMDISK_MEM (KERNEL_BUFFER_MEM + KERNEL_BUFFER_SIZE)
+
+// kernel ramdisk size
+#define KERNEL_RAMDISK_SIZE 0x400000 // 4MB
 
 // user stack top
 #define USER_STACK_TOP 0x8000000    // 128MB

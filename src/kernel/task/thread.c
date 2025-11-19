@@ -42,7 +42,6 @@ void init_thread() {
 void test_thread() {
     set_interrupt_state(true);
     test();
-    LOGK("test finished of task %d\n", getpid());
     while (true) {
         sleep(10);
     }

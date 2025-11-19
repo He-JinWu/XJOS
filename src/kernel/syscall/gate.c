@@ -6,6 +6,7 @@
 #include <xjos/memory.h>
 #include <drivers/device.h>
 #include <libc/string.h>
+#include <fs/buffer.h>
 
 extern void link_page(u32 vaddr);
 extern void unlink_page(u32 vaddr);
@@ -33,17 +34,22 @@ static u32 sys_test() {
     char ch;
     device_t *device;
 
-    void *buf = (void *)alloc_kpage(1);
-
-    device = device_find(DEV_IDE_PART, 0);
-
+    device = device_find(DEV_IDE_DISK, 0);
     assert(device);
 
-    memset(buf, running_task()->uid, 512);
+    // 0 block (1 + 2 sector)
+    buffer_t *buf = bread(device->dev, 0);
 
-    device_request(device->dev, buf, 1, running_task()->uid, 0, REQ_WRITE);
+    // 2 sector data
+    char *data = buf->data + SECTOR_SIZE;
+    memset(data, 0x5a, SECTOR_SIZE);
 
-    free_kpage((u32)buf, 1);
+    buf->dirty = true;
+    
+    bwrite(buf);    // delay write-back
+
+    brelse(buf);
+
     return 255;
 }
 
