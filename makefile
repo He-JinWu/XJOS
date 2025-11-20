@@ -52,12 +52,11 @@ ASM_OBJS := $(patsubst $(SRC_DIR)/%.asm, $(BUILD_DIR)/%.o, $(ASM_SOURCES))
 ENTRY_OBJ  := $(BUILD_DIR)/kernel/x86/start.o
 OTHER_OBJS := $(filter-out $(ENTRY_OBJ), $(C_OBJS) $(ASM_OBJS))
 
-IMAGES := $(BUILD_DIR)/master.img $(BUILD_DIR)/slave.img
 # ====================================================================
 #                            Build Rules
 # ====================================================================
 # Default target
-all: $(IMAGES)
+all: image
 
 # --- Bootloader Rules ---
 # Compile boot.asm and loader.asm
@@ -93,21 +92,8 @@ $(BUILD_DIR)/system.bin: $(BUILD_DIR)/kernel.bin
 $(BUILD_DIR)/system.map: $(BUILD_DIR)/kernel.bin
 	nm $< | sort > $@
 
-$(BUILD_DIR)/master.img: $(BUILD_DIR)/boot/boot.bin \
-                        $(BUILD_DIR)/boot/loader.bin \
-                        $(BUILD_DIR)/system.bin \
-                        $(BUILD_DIR)/system.map \
-						$(SRC_DIR)/utils/master.sfdisk
-	yes | bximage -q -hd=16 -func=create -sectsize=512 -imgmode=flat $@
-	dd if=$(BUILD_DIR)/boot/boot.bin of=$@ bs=512 count=1 conv=notrunc
-	dd if=$(BUILD_DIR)/boot/loader.bin of=$@ bs=512 count=4 seek=2 conv=notrunc
-	test -n "$$(find $(BUILD_DIR)/system.bin -size -100k)"
-	dd if=$(BUILD_DIR)/system.bin of=$@ bs=512 count=200 seek=10 conv=notrunc
-	sfdisk $@ < $(SRC_DIR)/utils/master.sfdisk
-
-$(BUILD_DIR)/slave.img:
-	yes | bximage -q -hd=32 -func=create -sectsize=512 -imgmode=flat $@ 
-
+include $(SRC_DIR)/utils/image.mk
+include $(SRC_DIR)/utils/cmd.mk
 # ====================================================================
 #                    Helper Commands (PHONY targets)
 # ====================================================================
@@ -117,33 +103,3 @@ test: all
 
 clean:
 	rm -rf $(BUILD_DIR)
-
-bochs: $(IMAGES)
-	bochs -q -f ./bochs/bochsrc -unlock
-
-qemu: $(IMAGES)
-	qemu-system-i386 \
-		-rtc base=localtime \
-		-m 32M \
-		-boot c \
-		-drive file=$(BUILD_DIR)/master.img,if=ide,index=0,media=disk,format=raw \
-		-drive file=$(BUILD_DIR)/slave.img,if=ide,index=1,media=disk,format=raw \
-		-audiodev pa,id=hda \
-    	-machine pcspk-audiodev=hda
-
-qemug: $(IMAGES)
-	qemu-system-i386 \
-		-s -S \
-		-m 32M \
-		-boot c \
-		-drive file=$(BUILD_DIR)/master.img,if=ide,index=0,media=disk,format=raw \
-		-drive file=$(BUILD_DIR)/slave.img,if=ide,index=1,media=disk,format=raw \
-		-audiodev pa,id=hda \
-    	-machine pcspk-audiodev=hda
-
-
-
-$(BUILD_DIR)/master.vmdk: $(BUILD_DIR)/master.img
-	qemu-img convert -O vmdk $< $@
-
-vmdk: $(BUILD_DIR)/master.vmdk
