@@ -2,11 +2,10 @@
 #define XJOS_BUFFER_H
 
 #include <xjos/types.h>
+#include <fs/fs.h>
 #include <xjos/list.h>
 #include <xjos/spinlock.h>
 
-#define BLOCK_SIZE 1024 // block size in bytes
-#define SECTOR_SIZE 512
 #define BLOCK_SECS (BLOCK_SIZE / SECTOR_SIZE) // 1 block = 2 sectors
 
 typedef struct buffer_t {
