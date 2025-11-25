@@ -10,8 +10,8 @@
 #define MINIX1_MAGIC 0x137F
 #define NAME_LEN 14 // max length of file name
 
-#define IMAP_NR 8
-#define ZMAP_NR 8
+#define IMAP_NR 8   // inode map blocks number max
+#define ZMAP_NR 8   // zone map blocks number max
 
 typedef struct inode_desc_t {
     u16 mode;       // file type and attr(rwx bits)
@@ -22,6 +22,18 @@ typedef struct inode_desc_t {
     u8 nlinks;      // * number of links
     u16 zones[9];   // * block numbers (0-6 direct, 7 indirect, 8 double indirect)
 } inode_desc_t;
+
+typedef struct inode_t {
+    inode_desc_t *desc;     // pointer to inode descriptor
+    struct buffer_t *buf;   // pointer to buffer containing inode 
+    dev_t dev;           // device number
+    idx_t nr;           // inode number
+    u32 count;          // reference count
+    time_t atime;        // access time
+    time_t ctime;        // creation time
+    list_node_t node;    // list node
+    dev_t mount;        // install device
+} inode_t;
 
 typedef struct super_desc_t {
     u16 inodes;         // total number of inodes
@@ -34,10 +46,24 @@ typedef struct super_desc_t {
     u16 magic;          // magic number
 } super_desc_t;
 
+typedef struct super_block_t {
+    super_desc_t *desc;         // pointer to super block descriptor
+    struct buffer_t *buf;       // pointer to buffer containing super block
+    struct buffer_t *imaps[IMAP_NR]; // inode map buffers
+    struct buffer_t *zmaps[ZMAP_NR]; // zone map buffers
+    dev_t dev;             // device number
+    list_t inode_list;     // list of inodes (useing)
+    inode_t *iroot;         // root inode
+    inode_t *imount;        // mount inode
+} super_block_t;
+ 
 typedef struct dentry_t {
     u16 nr;         // inode number
     char name[NAME_LEN]; // file name
 } dentry_t;
 
+// dev contains super block
+super_block_t *get_super(dev_t dev);
+super_block_t *read_super(dev_t dev);
 
 #endif // XJOS_FS_H

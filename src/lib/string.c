@@ -105,14 +105,54 @@ size_t strlen(const char *str) {
 
 /*
  * strcmp - Compare two strings
- * @lhs: Left hand string
- * @rhs: Right hand string
- * * Note:
- * Must use u8 (unsigned) comparison to handle extended ASCII correctly.
+ * * Optimization:
+ * 1. SWAR: Compares 4 bytes (u32) at a time using stride logic.
+ * 2. Checks for Null terminator inside the 32-bit word.
  */
 int strcmp(const char *lhs, const char *rhs) {
-    const u8 *l = (const u8 *)lhs;
-    const u8 *r = (const u8 *)rhs;
+    const u32 *l_u32, *r_u32;
+    
+    // 1. Handle unaligned bytes until lhs is 4-byte aligned
+    // (Ideally we align both, but aligning one helps)
+    while (((u32)lhs & 3) || ((u32)rhs & 3)) {
+        if (*lhs != *rhs || *lhs == EOS) {
+            return (int)*(const u8 *)lhs - (int)*(const u8 *)rhs;
+        }
+        lhs++;
+        rhs++;
+    }
+
+    // 2. Fast Path: 32-bit comparison
+    l_u32 = (const u32 *)lhs;
+    r_u32 = (const u32 *)rhs;
+
+    u32 himagic = 0x80808080L;
+    u32 lomagic = 0x01010101L;
+
+    while (1) {
+        u32 l_val = *l_u32;
+        u32 r_val = *r_u32;
+
+        if (l_val != r_val) {
+            // Difference found within this word
+            break;
+        }
+
+        // They are equal, but did we hit the end of the string?
+        // Check for zero byte in l_val
+        if (((l_val - lomagic) & ~l_val & himagic) != 0) {
+            // Logic: Strings are identical up to here, and we found a terminator.
+            // They are fully equal.
+            return 0;
+        }
+
+        l_u32++;
+        r_u32++;
+    }
+
+    // 3. Fallback: Byte-by-byte for the mismatch/tail
+    const u8 *l = (const u8 *)l_u32;
+    const u8 *r = (const u8 *)r_u32;
 
     while (*l == *r && *l != EOS) {
         l++;
@@ -125,26 +165,59 @@ int strcmp(const char *lhs, const char *rhs) {
 
 /*
  * strchr - Find first occurrence of character
- * @str: String to search
- * @ch: Character to find
+ * * Optimization:
+ * SWAR algorithm checking for both Null terminator AND target char
+ * in parallel (4 bytes at a time).
  */
 char *strchr(const char *str, int ch) {
-    char c = (char)ch; 
-    
-    // Loop until the null terminator is reached
-    while (*str != EOS) {
-        if (*str == c) {
-            return (char *)str; // Found the character
-        }
-        str++;
-    }
-    
-    // Check for the null terminator itself
-    if (c == EOS) {
-        return (char *)str; 
+    const u32 *long_ptr;
+    u32 longword, magic_zero, magic_char;
+    u32 himagic = 0x80808080L;
+    u32 lomagic = 0x01010101L;
+    u8 c = (u8)ch;
+
+    // 1. Align to 4 bytes
+    for (; ((u32)str & 3) != 0; str++) {
+        if (*str == c) return (char *)str;
+        if (*str == EOS) return NULL;
     }
 
-    return NULL; // Not found
+    long_ptr = (const u32 *)str;
+    
+    // Prepare mask: e.g., if looking for 'A' (0x41), mask is 0x41414141
+    u32 char_mask = c | (c << 8) | (c << 16) | (c << 24);
+
+    for (;;) {
+        longword = *long_ptr++;
+
+        // Check for NULL (EOS)
+        // (x - 0x01) & ~x & 0x80
+        magic_zero = (longword - lomagic) & ~longword & himagic;
+
+        // Check for Char
+        // XOR with mask creates 0x00 where char matches
+        u32 xor_word = longword ^ char_mask;
+        magic_char = (xor_word - lomagic) & ~xor_word & himagic;
+
+        // If either logic found a "zero-like" byte
+        if ((magic_zero | magic_char) != 0) {
+            // Revert to byte check on the original string
+            const char *cp = (const char *)(long_ptr - 1);
+            
+            // We check 4 bytes manually now
+            if (cp[0] == c) return (char *)&cp[0];
+            if (cp[0] == EOS) return NULL;
+            
+            if (cp[1] == c) return (char *)&cp[1];
+            if (cp[1] == EOS) return NULL;
+            
+            if (cp[2] == c) return (char *)&cp[2];
+            if (cp[2] == EOS) return NULL;
+            
+            if (cp[3] == c) return (char *)&cp[3];
+            return NULL; // Should technically catch EOS at 4th byte if aligned logic holds
+        }
+    }
 }
 
 
@@ -154,17 +227,26 @@ char *strchr(const char *str, int ch) {
  * @ch: Character to find
  * * Optimization:
  * Search backwards from the end of the string.
+ * * FIX:
+ * Fixed potential pointer underflow UB where p could become (str - 1).
  */
 char *strrchr(const char *str, int ch) {
     // 1. Find the end of the string using optimized strlen
     const char *p = str + strlen(str);
 
     // 2. Scan backwards including the null terminator
-    do {
+    while (1) {
         if (*p == (char)ch) {
-            return (char *)p; // Found last occurrence
+            return (char *)p; // Found
         }
-    } while (--p >= str);
+
+        // Check boundary BEFORE decrementing to avoid UB
+        if (p == str) {
+            break;
+        }
+        
+        p--;
+    }
 
     return NULL; // Not found
 }
@@ -315,20 +397,39 @@ void *memcpy(void *dest, const void *src, size_t count) {
 
 
 /*
- * memchr - Search memory for a character
+ * memchr - Find a character in a memory block
  * @ptr: Pointer to memory block
- * @ch: Character to search for
+ * @ch: Character to find
  * @count: Size to search
+ * * Optimization:
+ * Uses hardware "repne scasb" instruction.
+ * Scans memory at hardware speed until byte matches or count reaches 0.
  */
 void *memchr(const void *ptr, int ch, size_t count) {
-    const u8 *p = (const u8 *)ptr;
-    u8 c = (u8)ch;
+    if (count == 0) return NULL;
 
-    for (size_t i = 0; i < count; i++) {
-        if (p[i] == c) {
-            return (void *)&p[i]; // Found the character
-        }
-    }
+    void *result;
+    
+    __asm__ __volatile__(
+        "repne ; scasb \n\t"  // Scan string byte: compare AL with [EDI], increment EDI, decrement ECX
+                              // Stops if ECX==0 or ZF=1 (Equal)
+        
+        "jne 1f \n\t"         // If ZF=0 (Not Equal) after loop, jump to not found
+        
+        "movl %%edi, %0 \n\t" // Found: EDI points to byte AFTER match
+        "decl %0 \n\t"        // Adjust pointer back by 1
+        "jmp 2f \n\t"
+        
+        "1: \n\t"
+        "xorl %0, %0 \n\t"    // Not found: return NULL (0)
+        "2:"
 
-    return NULL; // Not found within the specified count
+        : "=r"(result)        // Output
+        : "D"(ptr),           // Input: EDI = ptr
+          "a"(ch),            // Input: EAX (AL) = character to find
+          "c"(count)          // Input: ECX = count
+        : "cc", "memory"      // Clobbers flags
+    );
+
+    return result;
 }
