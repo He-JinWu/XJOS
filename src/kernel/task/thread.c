@@ -41,8 +41,11 @@ void init_thread() {
 
 void test_thread() {
     set_interrupt_state(true);
+    mode_t mask = umask(002);
+    printf("Test Thread started. old umask to %03o\n", mask);
+    printf("Test Thread started. new umask to %03o\n", running_task()->umask);
     while (true) {
-        test();
+        // test();
         sleep(10);
     }
 }

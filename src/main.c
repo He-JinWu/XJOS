@@ -33,12 +33,12 @@ void kernel_init() {
     ide_init();   
     syscall_init();
 
-    task_init();
     buffer_init(); 
     inode_init();
     super_init();
+    task_init();
 
-    while (1);
+    // while (1);
 
     set_interrupt_state(true);
 }

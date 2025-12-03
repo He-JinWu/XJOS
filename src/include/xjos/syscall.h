@@ -4,6 +4,10 @@
 
 #include <xjos/types.h>
 
+#if 0
+#include <asm/unistd_32.h>
+#endif
+
 
 typedef enum {
     SYS_NR_TEST,
@@ -14,6 +18,7 @@ typedef enum {
     SYS_NR_TIME = 13,
     SYS_NR_GETPID = 20,
     SYS_NR_BRK = 45,
+    SYS_NR_UMASK = 60,
     SYS_NR_GETPPID = 64,
     SYS_NR_YIELD = 158,
     SYS_NR_SLEEP = 162
@@ -39,5 +44,6 @@ int32 write(fd_t fd, const char *buf, u32 len);
 
 time_t time();
 
+mode_t umask(mode_t mask);
 
 #endif /* XJOS_SYSCALL_H */

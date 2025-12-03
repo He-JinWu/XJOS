@@ -90,17 +90,6 @@ static void mount_root() {
 
     root->iroot = iget(root->dev, 1);       // get '/'
     root->imount = iget(root->dev, 1);
-
-    idx_t idx = 0;
-    inode_t *inode = iget(root->dev, 1);
-
-    idx = bmap(inode, 3, true);
-
-    idx = bmap(inode, 7 + 7, true);
-
-    idx = bmap(inode, 7 + 512 * 3 + 510, true);
-
-    iput(inode);
 }
 
 
