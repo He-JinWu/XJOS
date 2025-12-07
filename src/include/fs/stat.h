@@ -22,13 +22,12 @@
 // If set on a directory, restricts deletion for non-file owners.
 #define ISVTX 0001000 // Restricted deletion flag (sticky bit)
 
-#define ISREG(m) (((m)&IFMT) == IFREG)  // Is a regular file
-#define ISDIR(m) (((m)&IFMT) == IFDIR)  // Is a directory file
-#define ISCHR(m) (((m)&IFMT) == IFCHR)  // Is a character device file
-#define ISBLK(m) (((m)&IFMT) == IFBLK)  // Is a block device file
+#define ISREG(m) (((m)&IFMT) == IFREG)  // Is a regular file
+#define ISDIR(m) (((m)&IFMT) == IFDIR)  // Is a directory file
+#define ISCHR(m) (((m)&IFMT) == IFCHR)  // Is a character device file
+#define ISBLK(m) (((m)&IFMT) == IFBLK)  // Is a block device file
 #define ISFIFO(m) (((m)&IFMT) == IFIFO) // Is a FIFO special file
-#define ISSYM(m) (((m)&IFMT) == IFSYM)  // Is a symbolic link file
-
+#define ISSYM(m) (((m)&IFMT) == IFSYM)  // Is a symbolic link file
 // File access permissions
 #define IRWXU 00700 // Owner Read, Write, Execute/Search
 #define IRUSR 00400 // Owner Read permission

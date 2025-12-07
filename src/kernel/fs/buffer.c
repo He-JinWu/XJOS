@@ -215,6 +215,16 @@ void brelse(buffer_t *bf) {
 }
 
 
+void bsync() {
+    buffer_t *bf = buffer_start;
+    for (u32 i = 0; i < buffer_count; i++, bf++) {
+        if (bf->dirty) {
+            bwrite(bf);
+        }
+    }
+}
+
+
 /**
  * init
  */

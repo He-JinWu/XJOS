@@ -183,6 +183,8 @@ static void put_page(u32 addr) {
     memory_map[idx]--;
     if (!memory_map[idx]) {
         free_pages++;
+        if (idx < start_page)
+            start_page = idx;
     }
 
     assert(free_pages > 0 && free_pages < total_pages);
@@ -260,7 +262,7 @@ static void flush_tlb(u32 vaddr) {
 }
 
 
-void mapping_int() {
+void mapping_init() {
 /*   pyhsical 0x201000 (Page Table)
      +-----------------------------------------------------------------+
      | PTE[0] | PTE[1] | PTE[2] | ... | PTE[1023] |

@@ -29,8 +29,11 @@ static void sys_default() {
     panic("Ssycall not implemented");
 }
 
+extern void dir_test();
 
 static u32 sys_test() {
+    dir_test();
+
     char ch;
     device_t *device;
 

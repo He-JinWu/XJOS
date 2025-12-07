@@ -23,6 +23,10 @@
 #define INDIRECT2_BLOCK (BLOCK_INDEXES * BLOCK_INDEXES) // indirect2 block numbers in inode
 #define TOTAL_BLOCK (DIRECT_BLOCK + INDIRECT1_BLOCK + INDIRECT2_BLOCK) // total block numbers in inode
 
+#define SEPARATOR1 '/'            // directory separator
+#define SEPARATOR2 '\\'           
+#define IS_SEPARATOR(c) (c == SEPARATOR1 || c == SEPARATOR2)
+
 typedef struct inode_desc_t {
     u16 mode;       // file type and attr(rwx bits)
     u16 uid;        // owner user id
@@ -72,6 +76,16 @@ typedef struct dentry_t {
     char name[NAME_LEN]; // file name
 } dentry_t;
 
+typedef struct dcache_entry_t {
+    list_node_t hnode; // hash table node
+    list_node_t lru_node;   // lru list node
+    idx_t nr;
+    struct inode_t *dir;    // parent directory inode
+
+    char name[NAME_LEN + 1];
+    u32 hash;        // name hash value
+} dcache_entry_t;
+
 // dev contains super block
 super_block_t *get_super(dev_t dev);
 super_block_t *read_super(dev_t dev);
@@ -86,5 +100,9 @@ idx_t bmap(inode_t *inode, idx_t block, bool create);
 inode_t *get_root_inode();
 inode_t *iget(dev_t dev, idx_t nr);
 void iput(inode_t *inode);
+
+void dcache_init();
+idx_t dcache_lookup(struct inode_t *dir, const char *name, size_t len);
+void dcache_add(struct inode_t *dir, const char *name, size_t len, idx_t nr);
 
 #endif // XJOS_FS_H

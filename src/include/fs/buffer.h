@@ -29,4 +29,6 @@ void brelse(buffer_t *bf);
 
 void buffer_init();
 
+void bsync();
+
 #endif //XJOS_BUFFER_H
