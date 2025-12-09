@@ -380,6 +380,7 @@ inode_t *named(char *pathname, char **next) {
     dentry_t *entry = NULL;
     buffer_t *buf = NULL;
     while (true) {
+        brelse(buf);
         buf = find_entry(&inode, left, next, &entry);
         if (!buf)
             goto failure;
@@ -430,17 +431,21 @@ inode_t *namei(char *pathname) {
     return inode;
 }
 
-#include <libc/stdio.h>
+#include <xjos/memory.h>
 
 void dir_test() {
-    char pathname[] = "/";
-    char *name = NULL;
-    inode_t *inode = named(pathname, &name);
-    iput(inode);
+    inode_t *inode = namei("/d1/d2/d3/../../../hello.txt");
 
-    inode = namei("/home/hello.txt");
-    int file_block = bmap(inode, 0, false);
-    printf("file_block: %d\n", file_block);
-    printf("file data %s\n", (char *)bread(inode->dev, file_block)->data);
-    iput(inode);
+    char *buf = (char *)alloc_kpage(1);
+    int i  = inode_read(inode, buf, 1024, 0);
+
+    LOGK("dir_test: read %d bytes:\n%s\n", i, buf);
+
+    memset(buf, 'A', PAGE_SIZE);
+    inode_write(inode, buf, PAGE_SIZE, 0);
+    memset(buf, 'B', PAGE_SIZE);
+    inode_write(inode, buf, PAGE_SIZE, PAGE_SIZE);
+
+    LOGK("bytes: %d\n", inode->desc->size);
+    bsync();
 }

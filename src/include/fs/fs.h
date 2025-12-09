@@ -44,7 +44,7 @@ typedef struct inode_t {
     idx_t nr;           // inode number
     u32 count;          // reference count
     time_t atime;        // access time
-    time_t ctime;        // creation time
+    time_t ctime;        // modify time
     list_node_t node;    // list node
     dev_t mount;        // install device
 } inode_t;
@@ -107,5 +107,9 @@ void dcache_add(struct inode_t *dir, const char *name, size_t len, idx_t nr);
 
 inode_t *named(char *pathname, char **next); // get pathname parent dir inode
 inode_t *namei(char *pathname);              // get pathname inode
+
+// in inode offset read/write len bytes -> buf
+int inode_read(inode_t *inode, char *buf, u32 len, off_t offset);
+int inode_write(inode_t *inode, char *buf, u32 len, off_t offset);
 
 #endif // XJOS_FS_H

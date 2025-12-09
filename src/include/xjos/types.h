@@ -51,4 +51,6 @@ typedef enum {
     stderr
 }std_fd_t;
 
+typedef int32 off_t;    // file offset
+
 #endif

@@ -10,7 +10,8 @@
 #define IFDIR 0040000 // Directory file
 #define IFCHR 0020000 // Character device file
 #define IFIFO 0010000 // FIFO special file
-#define IFSYM 0120000 // Symbolic link
+#define IFLNK 0120000 // Symbolic link
+#define IFSOCK 0140000 // Socket file
 
 // File mode flags:
 // ISUID: Tests if the set-user-ID flag is set.
@@ -27,7 +28,10 @@
 #define ISCHR(m) (((m)&IFMT) == IFCHR)  // Is a character device file
 #define ISBLK(m) (((m)&IFMT) == IFBLK)  // Is a block device file
 #define ISFIFO(m) (((m)&IFMT) == IFIFO) // Is a FIFO special file
-#define ISSYM(m) (((m)&IFMT) == IFSYM)  // Is a symbolic link file
+#define ISLNK(m) (((m)&IFMT) == IFLNK)  // Is a symbolic link file
+#define ISSOCK(m) (((m)&IFMT) == IFSOCK) // Is a socket file
+#define ISFILE(m) ISREG(m)
+
 // File access permissions
 #define IRWXU 00700 // Owner Read, Write, Execute/Search
 #define IRUSR 00400 // Owner Read permission

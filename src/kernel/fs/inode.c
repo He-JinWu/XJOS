@@ -1,4 +1,5 @@
 #include <fs/fs.h>
+#include <fs/stat.h>
 #include <xjos/syscall.h>
 #include <libc/assert.h>
 #include <xjos/debug.h>
@@ -136,4 +137,88 @@ void inode_init() {
         inode_t *inode = &inode_table[i];
         inode->dev = EOF;
     }
+}
+
+
+int inode_read(inode_t *inode, char *buf, u32 len, off_t offset) {
+    assert(ISFILE(inode->desc->mode) || ISDIR(inode->desc->mode));
+
+    if (offset >= inode->desc->size)
+        return EOF;
+    
+    u32 begin = offset;     // 记录初始偏移
+    
+    // file size limit
+    u32 left = MIN(len, inode->desc->size - offset);
+
+    while (left) {
+        // offset / block size 算出逻辑块号
+        // nr 获取物理块号
+        idx_t nr = bmap(inode, offset / BLOCK_SIZE, false);
+        assert(nr);
+
+        //[IO]
+        buffer_t *bf = bread(inode->dev, nr);
+
+        // exp. offset = 1500, BLOCK_SIZE = 1024 start = 1500 % 1024 = 476
+        u32 start = offset % BLOCK_SIZE; // 块内偏移
+
+        u32 chars = MIN(BLOCK_SIZE - start, left);
+
+        // update
+        offset += chars;    // file offset++
+        left -= chars;      // left--
+
+        char *ptr = bf->data + start;
+        memcpy(buf, ptr, chars);
+
+        buf += chars;
+
+        brelse(bf);
+    }
+
+    inode->atime = time();  // update access time
+    return offset - begin;  // 实际读取字节数
+}
+
+
+int inode_write(inode_t *inode, char *buf, u32 len, off_t offset) {
+    assert(ISFILE(inode->desc->mode));
+
+    u32 begin = offset;     // 记录初始偏移
+    u32 left = len;
+
+    while (left) {
+        idx_t nr = bmap(inode, offset / BLOCK_SIZE, true);
+        assert(nr);
+
+        // [RMW] 先读后写
+        buffer_t *bf = bread(inode->dev, nr);
+        bf->dirty = true;
+
+        u32 start = offset % BLOCK_SIZE; // 块内偏移
+        char *ptr = bf->data + start;
+        u32 chars = MIN(BLOCK_SIZE - start, left);
+
+        offset += chars;    // file offset++
+        left -= chars;      // left--
+
+        // [Expansion]
+        if (offset > inode->desc->size) {
+            inode->desc->size = offset;
+            inode->buf->dirty = true;
+        }
+
+        memcpy(ptr, buf, chars);
+
+        buf += chars;
+
+        brelse(bf);
+    }
+
+    inode->desc->mtime = inode->atime = time(); // update modify & access time
+
+    bwrite(inode->buf);
+
+    return offset - begin;  // 实际写入字节数
 }
