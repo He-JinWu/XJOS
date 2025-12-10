@@ -259,6 +259,10 @@ int ide_pio_read(ide_disk_t *disk, void *buf, u8 count, idx_t lba) {
     ide_busy_wait(ctrl, IDE_SR_DRDY);
 
     ide_select_sector(disk, lba, count);
+    
+    // 原子操作
+    bool intr_state = interrupt_disable();
+
 
     outb(ctrl->iobase + IDE_COMMAND, IDE_CMD_READ);
 
@@ -275,6 +279,8 @@ int ide_pio_read(ide_disk_t *disk, void *buf, u8 count, idx_t lba) {
         u32 offset = ((u32)buf + i * SECTOR_SIZE);
         ide_pio_read_sector(disk, (u16 *)offset);
     }
+
+    set_interrupt_state(intr_state);
 
     mutex_unlock(&ctrl->lock);
 
@@ -297,7 +303,10 @@ int ide_pio_write(ide_disk_t *disk, void *buf, u8 count, idx_t lba) {
     ide_select_sector(disk, lba, count);
     outb(ctrl->iobase + IDE_COMMAND, IDE_CMD_WRITE);
 
+    bool intr_state = interrupt_disable();
+
     for (size_t i = 0; i < count; i++) {
+        
         u32 offset = ((u32)buf + i * SECTOR_SIZE);
         ide_pio_write_sector(disk, (u16 *)offset);
         
@@ -306,9 +315,12 @@ int ide_pio_write(ide_disk_t *disk, void *buf, u8 count, idx_t lba) {
             ctrl->waiter = task;
             task_block(task, NULL, TASK_BLOCKED);
         }
+
         // wait for BSY = 1
         ide_busy_wait(ctrl, IDE_SR_NULL);
     }
+
+    set_interrupt_state(intr_state);
 
     mutex_unlock(&ctrl->lock);
 

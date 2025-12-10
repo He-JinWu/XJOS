@@ -149,18 +149,24 @@ int inode_read(inode_t *inode, char *buf, u32 len, off_t offset) {
     u32 left = MIN(len, inode->desc->size - offset);
 
     while (left) {
+        // exp. offset = 1500, BLOCK_SIZE = 1024 start = 1500 % 1024 = 476
+        u32 start = offset % BLOCK_SIZE; // 块内偏移
+        u32 chars = MIN(BLOCK_SIZE - start, left);
+
         // offset / block size 算出逻辑块号
         // nr 获取物理块号
         idx_t nr = bmap(inode, offset / BLOCK_SIZE, false);
-        assert(nr);
+        if (nr == 0) {
+            // fill 0
+            memset(buf, 0, chars);  // hole block
+            buf += chars;
+            offset += chars;        // file offset++
+            left -= chars;          // left--
+            continue;
+        }
 
         //[IO]
         buffer_t *bf = bread(inode->dev, nr);
-
-        // exp. offset = 1500, BLOCK_SIZE = 1024 start = 1500 % 1024 = 476
-        u32 start = offset % BLOCK_SIZE; // 块内偏移
-
-        u32 chars = MIN(BLOCK_SIZE - start, left);
 
         // update
         offset += chars;    // file offset++

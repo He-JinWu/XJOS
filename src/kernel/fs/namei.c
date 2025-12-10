@@ -377,31 +377,57 @@ inode_t *named(char *pathname, char **next) {
         return inode;  // single component (/home) 
 
     right++; // skip separator
-    dentry_t *entry = NULL;
-    buffer_t *buf = NULL;
+    
+    // [CHANGE] 移除这里的 dentry_t 和 buffer_t 定义，因为 dir_lookup 不返回这些
+    // dentry_t *entry = NULL;
+    // buffer_t *buf = NULL;
+
     while (true) {
-        brelse(buf);
-        buf = find_entry(&inode, left, next, &entry);
-        if (!buf)
+        // [CHANGE] 原有逻辑删除：brelse(buf); buf = find_entry(...)
+        
+        // [NEW] 手动解析当前路径分量 (例如 "usr" from "usr/bin")
+        char *p = left;
+        while (*p && !IS_SEPARATOR(*p)) {
+            p++;
+        }
+        size_t len = p - left;
+
+        // [NEW] 使用 dir_lookup 替代 find_entry
+        // dir_lookup 内部封装了 dcache 查找 -> 失败查盘 -> 自动填充 dcache
+        idx_t nr = dir_lookup(inode, left, len);
+        
+        if (nr == 0) // not found
             goto failure;
         
+        // [CHANGE] 获取子目录 inode
         dev_t dev = inode->dev;
         iput(inode);    // release parent dir inode
-        inode = iget(dev, entry->nr);
+        inode = iget(dev, nr);
+
         if (!ISDIR(inode->desc->mode) || !permission(inode, P_EXEC))
             goto failure;
-        if (right == *next)
-            goto success; // last component
-        
-        left = *next;
+
+        // [NEW] 更新指针位置，跳过分割符
+        left = p;
+        if (IS_SEPARATOR(*left)) {
+            left++;
+        }
+
+        // [CHANGE] 检查是否到达终点 (right 指向的是最后一个分量之前的分隔符位置)
+        // 注意：这里的比较逻辑需要根据 left 的移动进行调整
+        // 当 left 跨过了 right 指向的分隔符，说明我们已经处理到了倒数第二个分量
+        if (right <= left) {
+            *next = left; // next 指向剩下的部分 (即文件名)
+            goto success; 
+        }
     }
 
 success:
-    brelse(buf);
+    // [CHANGE] 移除 brelse(buf)，dir_lookup 已经处理了
     return inode;
 
 failure:
-    brelse(buf);
+    // [CHANGE] 移除 brelse(buf)
     iput(inode);
     return NULL;
 }
@@ -416,17 +442,26 @@ inode_t *namei(char *pathname) {
         return dir; // exact match '/'
     
     char *name = next;
-    dentry_t *entry = NULL;
-    buffer_t *buf = find_entry(&dir, name, &next, &entry);
-    if (!buf) {     // not found
+    // [CHANGE] 移除 buffer_t *buf = find_entry(...)
+    
+    // [NEW] 计算文件名长度
+    char *p = name;
+    while (*p && !IS_SEPARATOR(*p)) p++;
+    size_t len = p - name;
+
+    // [NEW] 使用 dir_lookup 查找最终目标
+    // 这样最后的文件名查找也会走缓存！
+    idx_t nr = dir_lookup(dir, name, len);
+    
+    if (nr == 0) {     // not found
         iput(dir);
         return NULL;
     }
 
-    inode_t *inode = iget(dir->dev, entry->nr);
+    inode_t *inode = iget(dir->dev, nr);
 
     iput(dir);
-    brelse(buf);
+    // [CHANGE] 移除 brelse(buf)
 
     return inode;
 }
@@ -434,33 +469,56 @@ inode_t *namei(char *pathname) {
 #include <xjos/memory.h>
 
 void dir_test() {
-    inode_t *inode = namei("/hello.txt");
-    if (!inode) {
-        return; 
+    LOGK("======== DIRTY LIST TEST START ========\n");
+
+    // 1. 准备数据
+    dev_t dev = 4; // 假设你的根设备号是 4
+    idx_t start_block = 100; // 从逻辑块 100 开始
+    int test_count = 20;     // 测试 20 个块
+
+    LOGK("Step 1: Modifying %d blocks to fill dirty_list...\n", test_count);
+    for (int i = 0; i < test_count; i++) {
+        // 读取块
+        buffer_t *bf = bread(dev, start_block + i);
+        
+        // 修改内容并标记为脏
+        memset(bf->data, 0x55 + i, BLOCK_SIZE);
+        bf->dirty = true;
+
+        // 释放。根据新逻辑，由于 dirty=true，它们应该进入 dirty_list
+        brelse(bf);
     }
 
-    char buf[1024];
-    memset(buf, 'A', 1024);
-    for (int i=0; i<8; i++) {
-        inode_write(inode, buf, 1024, i*1024);
+    // 2. 验证 sync 的效果
+    LOGK("Step 2: Calling bsync() to flush dirty_list...\n");
+    // 如果 dirty_list 生效，bsync 内部循环应该只跑 20 次，而不是遍历几千个 buffer
+    bsync();
+
+    // 3. 校验磁盘数据是否真的写进去了
+    LOGK("Step 3: Verifying flushed data...\n");
+    for (int i = 0; i < test_count; i++) {
+        buffer_t *bf = bread(dev, start_block + i);
+        
+        // 检查数据
+        if ((u8)bf->data[0] != (u8)(0x55 + i)) {
+            LOGK("Error: Block %d verify failed! Data mismatch.\n", start_block + i);
+            brelse(bf);
+            return;
+        }
+        
+        // 检查状态：写回后 dirty 应该为 false
+        if (bf->dirty != false) {
+            LOGK("Error: Block %d dirty flag not cleared after sync!\n", start_block + i);
+            brelse(bf);
+            return;
+        }
+        
+        brelse(bf);
     }
-    
-    LOGK("Before truncate: size = %d\n", inode->desc->size);
-    // 预期输出: 8192
-    
 
-    LOGK("Truncating file...\n");
-    inode_truncate(inode);
+    LOGK("Step 4: Checking reusable logic...\n");
+    // 再次调用 bsync()，此时 dirty_list 为空，应该瞬间执行完毕
+    bsync();
 
-    
-    LOGK("After truncate: size = %d\n", inode->desc->size);
-    // 预期输出: 0
-    
-    int bytes_read = inode_read(inode, buf, 1024, 0);
-    LOGK("Read bytes after truncate: %d\n", bytes_read);
-    // 预期输出: 0 (EOF)
-
-    LOGK("Zone[0] after truncate = %d\n", inode->desc->zones[0]); 
-
-    iput(inode);
+    LOGK("======== DIRTY LIST TEST PASSED ========\n");
 }

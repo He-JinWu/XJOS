@@ -159,7 +159,17 @@ reckon:
         // 1.auto alloc logical
         if (!array[index] && create) {
             // alloc new blk
-            array[index] = balloc(inode->dev);
+            // * balloc maybe return EOF
+            idx_t new_block = balloc(inode->dev);
+            if (new_block == EOF) {
+                brelse(buf);
+                return 0;   // !Error
+            }
+            array[index] = new_block;
+            buffer_t *new_buf = bread(inode->dev, array[index]);
+            memset(new_buf->data, 0, BLOCK_SIZE);
+            new_buf->dirty = true;
+            brelse(new_buf);
             // write-back inode buf
             buf->dirty = true;
         }

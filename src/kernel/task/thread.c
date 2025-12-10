@@ -53,7 +53,7 @@ void test_thread() {
 void sync_thread() {
     set_interrupt_state(true);
     while (true) {
-        sync();
+        // sync();
         sleep(5000); // every 5 seconds
     }
 }

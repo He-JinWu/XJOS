@@ -488,5 +488,5 @@ void task_init() {
     idle_task = task_create(idle_thread, "idle", NICE_MAX, KERNEL_USER);
     task_create(init_thread, "init", NICE_DEFAULT, NORMAL_USER);
     task_create(test_thread, "test", NICE_DEFAULT, NORMAL_USER);
-    task_create(sync_thread, "sync", NICE_DEFAULT, KERNEL_USER);
+    task_create(sync_thread, "sync", NICE_DEFAULT, NORMAL_USER);
 }

@@ -23,6 +23,7 @@ static buffer_t *buffer_ptr;
 static void *buffer_data;
 
 static list_t free_list;    // cache free list(LRU)
+static list_t dirty_list;   // cache dirty list [新增: 脏缓冲链表]
 static list_t wait_list;    // wait list
 
 /**
@@ -90,9 +91,7 @@ static buffer_t *get_new_buffer() {
         bf->count = 0;
         bf->dirty = false;
         bf->valid = false;
-        // todo
-        // spin_init(&bf->lock, "buffer_lock");
-
+        
         buffer_count++;
         buffer_ptr++;
         buffer_data -= BLOCK_SIZE;
@@ -113,12 +112,9 @@ static buffer_t *get_free_buffer() {
         // 2. LRU back replace
         if (!list_empty(&free_list)) {
             bf = list_entry(list_popback(&free_list), buffer_t, rnode);
-
-            // [critical] write-back
-            if (bf->dirty) {
-                bwrite(bf);
-            }
-
+            
+            // 原有的 write-back 逻辑已移除，因为 free_list 里只应该存干净的
+            
             hash_remove(bf);
 
             bf->valid = false;
@@ -126,7 +122,21 @@ static buffer_t *get_free_buffer() {
             return bf;
         }
 
-        // 3. wait for buffer release
+        // [新增] 3. 尝试从脏链表获取 (需要先写回磁盘)
+        if (!list_empty(&dirty_list)) {
+            bf = list_entry(list_popback(&dirty_list), buffer_t, rnode);
+            hash_remove(bf);
+
+            // 必须同步写回磁盘
+            bwrite(bf);
+
+            // 写回后，该 buffer 变为干净且可用
+            bf->valid = false;
+            bf->dirty = false;
+            return bf;
+        }
+
+        // 4. wait for buffer release
         task_block(running_task(), &wait_list, TASK_WAITING);
     }
 }
@@ -143,8 +153,8 @@ buffer_t *getblk(dev_t dev, idx_t block) {
         assert(bf->valid);
         bf->count++;
         if (bf->count == 1) {
-            // remove from free list
-            assert(!list_empty(&free_list));
+            // remove from list (could be free_list OR dirty_list)
+            // [新增] 无论在哪个链表，被复用时都需要移除
             list_remove(&bf->rnode);
         }
         return bf;
@@ -201,9 +211,12 @@ void brelse(buffer_t *bf) {
     assert(bf->count >= 0);
 
     if (bf->count == 0) {
-        // [ctitical] add to free list head
-        // lazy write-back
-        list_push(&free_list, &bf->rnode);
+        // [修改] 根据 dirty 标志决定放入哪个链表
+        if (bf->dirty) {
+            list_push(&dirty_list, &bf->rnode); // 放入脏链表
+        } else {
+            list_push(&free_list, &bf->rnode);  // 放入空闲链表
+        }
 
         // wake-up waiters
         if (!list_empty(&wait_list)) {
@@ -216,11 +229,23 @@ void brelse(buffer_t *bf) {
 
 
 void bsync() {
-    buffer_t *bf = buffer_start;
-    for (u32 i = 0; i < buffer_count; i++, bf++) {
-        if (bf->dirty) {
-            bwrite(bf);
-        }
+    // [修改] 优化后的 sync，只处理脏链表
+    buffer_t *bf = NULL;
+    int flushed_count = 0; // 新增统计
+    while (!list_empty(&dirty_list)) {
+        // 取出一个脏块
+        bf = list_entry(list_pop(&dirty_list), buffer_t, rnode);
+        
+        // 写回磁盘 (bwrite 内部会清除 dirty 标志)
+        bwrite(bf);
+
+        // 写回后该 buffer 变干净了，放入 free_list 供回收使用
+        list_push(&free_list, &bf->rnode);
+        flushed_count++;
+    }
+
+    if (flushed_count > 0) {
+        LOGK("bsync: [Dirty List Logic] Flushed %d blocks to disk.\n", flushed_count);
     }
 }
 
@@ -233,6 +258,7 @@ void buffer_init() {
     LOGK("buffer_init: init...\n");
 
     list_init(&free_list);
+    list_init(&dirty_list); // [新增] 初始化脏链表
     list_init(&wait_list);
 
     u32 total_mem_size = KERNEL_BUFFER_SIZE;
@@ -260,5 +286,3 @@ void buffer_init() {
     buffer_data = (void *)(KERNEL_BUFFER_MEM + KERNEL_BUFFER_SIZE - BLOCK_SIZE);
     assert((u32)buffer_ptr < (u32)buffer_data);
 }
-
-// todo sync, flush all buffers to disk
