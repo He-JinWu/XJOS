@@ -27,6 +27,19 @@
 #define SEPARATOR2 '\\'           
 #define IS_SEPARATOR(c) (c == SEPARATOR1 || c == SEPARATOR2)
 
+enum file_flag {
+    O_RDONLY = 00,              // read only
+    O_WRONLY = 01,              // write only
+    O_RDWR = 02,                // read and write
+    O_ACCMODE = 03,             // mask for above modes
+    O_CREAT = 00100,            // create file if it does not exist
+    O_EXCL = 00200,             // exclusive use flag
+    O_NOCTTY = 00400,           // do not assign controlling terminal
+    O_TRUNC = 01000,            // file exists (write): truncate it
+    O_APPEND = 02000,           // add to the end of file
+    O_NONBLOCK = 04000,         // non-blocking mode
+};
+
 typedef struct inode_desc_t {
     u16 mode;       // file type and attr(rwx bits)
     u16 uid;        // owner user id
@@ -110,6 +123,8 @@ void dcache_add(struct inode_t *dir, const char *name, size_t len, idx_t nr);
 
 inode_t *named(char *pathname, char **next); // get pathname parent dir inode
 inode_t *namei(char *pathname);              // get pathname inode
+
+inode_t *inode_open(char *pathname, int flag, int mode);
 
 // in inode offset read/write len bytes -> buf
 int inode_read(inode_t *inode, char *buf, u32 len, off_t offset);

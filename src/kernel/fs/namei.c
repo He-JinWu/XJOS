@@ -553,6 +553,15 @@ inode_t *namei(char *pathname) {
 }
 
 
+static _inline size_t path_len(const char *path) {
+    size_t len = 0;
+    while (path[len] && !IS_SEPARATOR(path[len])) {
+        len++;
+    }
+    return len;
+}
+
+
 int sys_mkdir(char *pathname, mode_t mode) {
     char *next = NULL;
     buffer_t *ebuf = NULL;
@@ -575,12 +584,9 @@ int sys_mkdir(char *pathname, mode_t mode) {
 
     // 2. caclulate name length
     char *name = next;
-    size_t len = 0;
-    while (name[len] && !IS_SEPARATOR(name[len]))
-        len++;
         
     // 3. check if file exists
-    if (dir_lookup(dir, name, len) != 0) {
+    if (dir_lookup(dir, name, path_len(name)) != 0) {
         LOGK("mkdir: cannot create directory \"%s\": File exists\n", name);
         goto rollback;
     }
@@ -620,7 +626,7 @@ int sys_mkdir(char *pathname, mode_t mode) {
     brelse(zbuf);    // sync at the end
 
     // 8. update Dcache
-    dcache_add(dir, name, len, nr);
+    dcache_add(dir, name, path_len(name), nr);
 
     ret = 0; // success
 
@@ -646,8 +652,6 @@ int sys_rmdir(char *pathname) {
 
     // Calculate name length for dcache_delete later
     char *name = next;
-    size_t len = 0;
-    while (name[len] && !IS_SEPARATOR(name[len])) len++;
 
     // 2. find target dentry
     // Must use find_entry (not dir_lookup) because we need 'ebuf' to modify it
@@ -696,7 +700,7 @@ int sys_rmdir(char *pathname) {
     bdirty(ebuf, true);
 
     // 7. Clear Dcache (Important!)
-    dcache_delete(dir, name, len);
+    dcache_delete(dir, name, path_len(name));
 
     ret = 0;
 
@@ -731,9 +735,6 @@ int sys_link(char *oldname, char *newname) {
         goto rollback;
 
     char *name = next;
-    size_t len = 0;
-    while (name[len] && !IS_SEPARATOR(name[len]))
-        len++;
 
     dentry_t *entry;
 
@@ -752,7 +753,7 @@ int sys_link(char *oldname, char *newname) {
     ret = 0;
 
     // update Dcache
-    dcache_add(dir, name, len, inode->nr);
+    dcache_add(dir, name, path_len(name), inode->nr);
 
 rollback:
     brelse(buf);
@@ -774,8 +775,6 @@ int sys_unlink(char *filename) {
     if (!permission(dir, P_WRITE)) goto rollback;
 
     char *name = next;
-    size_t len = 0;
-    while (name[len] && !IS_SEPARATOR(name[len])) len++;
 
     // find target dentry
     dentry_t *entry;
@@ -810,7 +809,7 @@ int sys_unlink(char *filename) {
     }
 
     // sync dcache
-    dcache_delete(dir, name, len);
+    dcache_delete(dir, name, path_len(name));
 
     ret = 0;
 
@@ -820,4 +819,80 @@ rollback:
     iput(dir);
     iput(inode);
     return ret;
+}
+
+
+inode_t *inode_open(char *pathname, int flag, int mode) {
+    inode_t *dir = NULL;
+    inode_t *inode = NULL;
+    buffer_t *buf = NULL;
+    dentry_t *entry = NULL;
+    char *next = NULL;
+
+    dir = named(pathname, &next); // parent dir
+    if (!dir)
+        goto rollback;
+    if (!*next)   // exact match
+        goto rollback;
+    
+    if ((flag & O_TRUNC) && ((flag & O_ACCMODE) == O_RDONLY))
+        goto rollback; // cannot truncate read-only file
+    
+    char *name = next;
+    buf = find_entry(&dir, name, &next, &entry);
+    if (buf) {      // file exists
+        inode = iget(dir->dev, entry->nr);
+        goto makeup;
+    }
+
+    // file not exists
+    if (!(flag & O_CREAT))
+        goto rollback; // not create flag
+    if (!permission(dir, P_WRITE))
+        goto rollback; // no write permission
+
+    // add new entry
+    buf = add_entry(dir, name, &entry);
+    if (!buf)
+        goto rollback;
+
+    // 从inode位图中分配新inode，然后再拿到物理块号
+    entry->nr = ialloc(dir->dev);   // * ialloc may fail?
+    bdirty(buf, true);
+
+    inode = iget(dir->dev, entry->nr);
+    
+    task_t *task = running_task();
+
+    mode &= (0777 & ~task->umask);
+    mode |= IFREG; // regular file
+    
+    inode->desc->uid = task->uid;
+    inode->desc->gid = task->gid;
+    inode->desc->mode = mode;
+    inode->desc->mtime = time();
+    inode->desc->size = 0;
+    inode->desc->nlinks = 1;
+    bdirty(inode->buf, true);
+
+    dcache_add(dir, name, path_len(name), inode->nr);
+
+makeup:
+    if (ISDIR(inode->desc->mode) || !permission(inode, flag & O_ACCMODE))
+        goto rollback;
+    
+    inode->atime = time();
+
+    if (flag & O_TRUNC)
+        inode_truncate(inode);
+
+    brelse(buf);
+    iput(dir);
+    return inode;
+
+rollback:
+    brelse(buf);
+    iput(dir);
+    iput(inode);
+    return NULL;
 }

@@ -42,15 +42,8 @@ void init_thread() {
 
 void test_thread() {
     set_interrupt_state(true);
-    // test();
-    // mkdir("/world.txt", 0755);
-    // rmdir("/empty");
-
-    link("/hello.txt", "/world.txt");
-    unlink("/world.txt");
-
-    sync();
     while (true) {
+        test();
         sleep(10);
     }
 }
@@ -59,7 +52,7 @@ void test_thread() {
 void sync_thread() {
     set_interrupt_state(true);
     while (true) {
-        // sync();
+        sync();
         sleep(5000); // every 5 seconds
     }
 }
