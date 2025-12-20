@@ -94,7 +94,8 @@ void dcache_init() {
 
     for (int i = 0; i < DCACHE_NR; i++) {
         dcache_entry_t *entry = &dcache_entries[i];
-        entry->dir = NULL;
+        entry->dev = 0;
+        entry->p_nr = 0;
         entry->nr = 0;
         list_push(&dcache_lru_list, &entry->lru_node);
     }    
@@ -113,7 +114,7 @@ idx_t dcache_lookup(inode_t *dir, const char *name, size_t len) {
         if (entry->hash != hash)
             continue;
         // 2. check parent dir
-        if (entry->dir != dir)
+        if (entry->dev != dir->dev || entry->p_nr != dir->nr)
             continue;
 
         // 3. check name
@@ -137,16 +138,17 @@ void dcache_add(inode_t *dir, const char *name, size_t len, idx_t nr) {
         return;
     }
 
-    // front is the most recently used
-    list_node_t *node = list_pop(&dcache_lru_list);
+    // from tail (least recently used)
+    list_node_t *node = list_popback(&dcache_lru_list);
     dcache_entry_t *entry = list_entry(node, dcache_entry_t, lru_node);
 
-    if (entry->dir != NULL)
+    if (entry->nr != 0)
         list_remove(&entry->hnode); // remove from hash table
     
     // 2. fill entry
     entry->nr = nr;
-    entry->dir = dir;
+    entry->dev = dir->dev;
+    entry->p_nr = dir->nr;
     entry->hash = str_hash(name, len);
 
     // 超出 14限制 截断
@@ -174,7 +176,7 @@ void dcache_delete(inode_t *dir, const char *name, size_t len) {
     list_for_each_entry(entry, head, hnode) {
         if (entry->hash != hash)
             continue;
-        if (entry->dir != dir)
+        if (entry->dev != dir->dev || entry->p_nr != dir->nr)
             continue;
         if (memcmp(entry->name, name, len) == 0 && entry->name[len] == EOS) {
             // Remove hash table and LRU list
@@ -182,7 +184,8 @@ void dcache_delete(inode_t *dir, const char *name, size_t len) {
             list_remove(&entry->lru_node);
 
             // reset entry
-            entry->dir = NULL;
+            entry->dev = 0;
+            entry->p_nr = 0;
             entry->nr = 0;
             // Add back to free list
             list_push(&dcache_lru_list, &entry->lru_node);
@@ -622,9 +625,9 @@ int sys_mkdir(char *pathname, mode_t mode) {
     ret = 0; // success
 
 rollback:
-    if (ebuf) brelse(ebuf);
-    if (dir) iput(dir);
-    if (inode) iput(inode);
+    brelse(ebuf);
+    iput(dir);
+    iput(inode);
     return ret;
 }
 
@@ -698,8 +701,123 @@ int sys_rmdir(char *pathname) {
     ret = 0;
 
 rollback:
-    if (inode) iput(inode);
-    if (dir) iput(dir);
-    if (ebuf) brelse(ebuf);
+    iput(inode);
+    iput(dir);
+    brelse(ebuf);
+    return ret;
+}
+
+
+int sys_link(char *oldname, char *newname) {
+    int ret = 0;
+    buffer_t *buf = NULL;
+    inode_t *dir = NULL;
+    inode_t *inode = namei(oldname);
+    if (!inode)
+        goto rollback;
+
+    if (ISDIR(inode->desc->mode))
+        goto rollback;
+
+    char *next = NULL;
+    dir = named(newname, &next);    // parent dir
+    if (!dir)       // 
+        goto rollback;
+    if (!*next)     // empty newname
+        goto rollback;
+    if (dir->dev != inode->dev)
+        goto rollback; // cross-device link
+    if (!permission(dir, P_WRITE))
+        goto rollback;
+
+    char *name = next;
+    size_t len = 0;
+    while (name[len] && !IS_SEPARATOR(name[len]))
+        len++;
+
+    dentry_t *entry;
+
+    buf = find_entry(&dir, name, &next, &entry);
+    if (buf)        // newname exists
+        goto rollback;
+
+    // add new entry
+    buf = add_entry(dir, name, &entry);
+    entry->nr = inode->nr;      // point to the same inode
+    bdirty(buf, true);
+
+    inode->desc->nlinks++;      // increase link count
+    inode->ctime = time();
+    bdirty(inode->buf, true);
+    ret = 0;
+
+    // update Dcache
+    dcache_add(dir, name, len, inode->nr);
+
+rollback:
+    brelse(buf);
+    iput(inode);
+    iput(dir);
+    return ret;
+}
+
+
+int sys_unlink(char *filename) {
+    int ret = EOF;
+    char *next = NULL;
+    buffer_t *ebuf = NULL;
+    inode_t *inode = NULL;
+
+    inode_t *dir = named(filename, &next); // parent dir
+    if (!dir) goto rollback;
+    if (!*next) goto rollback;
+    if (!permission(dir, P_WRITE)) goto rollback;
+
+    char *name = next;
+    size_t len = 0;
+    while (name[len] && !IS_SEPARATOR(name[len])) len++;
+
+    // find target dentry
+    dentry_t *entry;
+    ebuf = find_entry(&dir, name, &next, &entry);
+    if (!ebuf) goto rollback; // not found
+
+    inode = iget(dir->dev, entry->nr);
+    if (!inode) goto rollback;
+
+    // check, dont use unlink delete dir(should use rmdir)
+    if (ISDIR(inode->desc->mode)) {
+        LOGK("unlink: cannot unlink directory \"%s\"\n", name);
+        goto rollback;
+    }
+
+    task_t *task = running_task();
+    if ((dir->desc->mode & ISVTX) && task->uid != inode->desc->uid && task->uid != KERNEL_USER)
+        goto rollback;
+    
+    // execute unlink
+    entry->nr = 0;
+    bdirty(ebuf, true);
+
+    inode->desc->nlinks--;
+    inode->ctime = time();
+    bdirty(inode->buf, true);
+
+    // if link count == 0, free inode
+    if (inode->desc->nlinks == 0) {
+        inode_truncate(inode);  // 物理块
+        ifree(inode->dev, inode->nr);   // inode
+    }
+
+    // sync dcache
+    dcache_delete(dir, name, len);
+
+    ret = 0;
+
+
+rollback:
+    brelse(ebuf);
+    iput(dir);
+    iput(inode);
     return ret;
 }

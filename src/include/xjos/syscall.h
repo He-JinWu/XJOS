@@ -15,6 +15,8 @@ typedef enum {
     SYS_NR_FORK = 2,
     SYS_NR_WRITE = 4,
     SYS_NR_WAITPID = 7,
+    SYS_NR_LINK = 9,
+    SYS_NR_UNLINK = 10,
     SYS_NR_TIME = 13,
     SYS_NR_GETPID = 20,
     SYS_NR_SYNC = 36,
@@ -47,6 +49,9 @@ int32 write(fd_t fd, const char *buf, u32 len);
 
 int mkdir(char *pathname, mode_t mode);
 int rmdir(char *pathname);
+
+int link(char *oldname, char *newname);
+int unlink(char *filename);
 
 time_t time();
 

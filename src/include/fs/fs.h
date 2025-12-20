@@ -80,7 +80,10 @@ typedef struct dcache_entry_t {
     list_node_t hnode; // hash table node
     list_node_t lru_node;   // lru list node
     idx_t nr;
-    struct inode_t *dir;    // parent directory inode
+    // struct inode_t *dir;  dont need dir pointer
+
+    dev_t dev;    // parent device number
+    idx_t p_nr;  // parent inode number
 
     char name[NAME_LEN + 1];
     u32 hash;        // name hash value
