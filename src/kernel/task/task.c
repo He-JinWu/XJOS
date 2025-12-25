@@ -438,22 +438,31 @@ void task_to_user_mode(target_t target) {
 pid_t sys_getpid() { return running_task()->pid; }
 pid_t sys_getppid() { return running_task()->ppid; }
 
-long sys_nice(int increment) {
-    task_t *task = running_task();
-    int new_nice = task->nice + increment;
+fd_t task_get_fd(task_t *task) {
+    fd_t i;
+    /**
+     * 0,1,2 stdin,stdout,stderr
+     */
+    for (i = 3; i < TASK_FILE_NR; i++) {
+        if (!task->files[i])
+            break;
+    }
 
-    // 边界检查
-    if (new_nice < NICE_MIN) new_nice = NICE_MIN;
-    if (new_nice > NICE_MAX) new_nice = NICE_MAX;
+    if (i == TASK_FILE_NR) {
+        panic("Too many open files");
+    }
 
-    task->nice = new_nice;
-    task->weight = sched_nice_to_weight(new_nice);
-    
-    // 重新计算 vruntime 以防止通过频繁修改 nice 值作弊
-    // (简化的处理：保持 vruntime 不变，或者根据权重比例缩放，这里暂时保持不变即可)
-
-    return 0;
+    return i;
 }
+
+void task_put_fd(task_t *task, fd_t fd) {
+    if (fd < 3)
+        return;
+    
+    assert(fd < TASK_FILE_NR);
+    task->files[fd] = NULL;
+}
+
 
 extern void idle_thread();
 extern void init_thread();

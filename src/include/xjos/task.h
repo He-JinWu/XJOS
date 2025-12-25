@@ -10,6 +10,7 @@
 #define NORMAL_USER 1000
 
 #define TASK_NAME_LEN 16
+#define TASK_FILE_NR 16
 
 // 任务内核栈魔数，用于检测栈溢出
 #define XJOS_MAGIC 0x20250901
@@ -81,6 +82,7 @@ typedef struct task_t {
     struct inode_t *ipwd;    // 当前工作目录
     struct inode_t *iroot;   // 根目录
     u16 umask;               // 创建文件权限掩码
+    struct file_t *files[TASK_FILE_NR]; // 进程文件表
 
     // === 5. 调度器 (CFS) ===
     int nice;                // 静态优先级 (-20 ~ 19)
@@ -164,5 +166,8 @@ pid_t task_waitpid(pid_t pid, int32 *status);
 pid_t sys_getpid();
 pid_t sys_getppid();
 void task_to_user_mode(target_t target);
+
+fd_t task_get_fd(task_t *task);
+void task_put_fd(task_t *task, fd_t fd);
 
 #endif /* XJOS_TASK_H */

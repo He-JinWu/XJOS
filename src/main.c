@@ -11,6 +11,7 @@ extern void keyboard_init();
 extern void tss_init();
 extern void ide_init();
 extern void buffer_init();
+extern void file_init();
 extern void super_init();
 extern void inode_init();
 extern void dcache_init();
@@ -38,6 +39,7 @@ void kernel_init() {
     inode_init();
     super_init();
     dcache_init();
+    file_init();
     task_init();
 
     // while (1);

@@ -102,6 +102,14 @@ typedef struct dcache_entry_t {
     u32 hash;        // name hash value
 } dcache_entry_t;
 
+typedef struct file_t {
+    inode_t *inode;     // file inode
+    u32 count;          // reference count
+    off_t offset;       // file offset
+    int flags;          // file flag
+    int mode;           // file mode
+} file_t;
+
 // dev contains super block
 super_block_t *get_super(dev_t dev);
 super_block_t *read_super(dev_t dev);
@@ -132,5 +140,8 @@ int inode_write(inode_t *inode, char *buf, u32 len, off_t offset);
 
 // free all data blocks of inode
 void inode_truncate(inode_t *inode);
+
+file_t *get_file();
+void put_file(file_t *file);
 
 #endif // XJOS_FS_H
