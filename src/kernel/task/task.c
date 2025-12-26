@@ -170,6 +170,7 @@ void task_activate(task_t *task) {
  * 注意：必须在用户态(Ring3)下调用 fork 才能正常工作，因为需要 SS/ESP 压栈
  */
 pid_t task_fork() {
+    assert(!get_interrupt_state());
     task_t *parent = running_task();
     task_t *child = get_free_task();
     pid_t pid = child->pid;
@@ -221,6 +222,19 @@ pid_t task_fork() {
     child->state = TASK_READY;
     child->magic = XJOS_MAGIC;
 
+    // add, fix ref count
+    for (int i = 0; i < TASK_FILE_NR; i++) {
+        file_t *file = child->files[i];
+        if (file) {
+            file->count++;  // 增加引用计数
+        }
+    }
+
+    // dir ref count
+    if (child->ipwd) child->ipwd->count++;
+    if (child->iroot) child->iroot->count++;
+
+
     // 3. 调度初始化
     child->vruntime = sched_get_min_vruntime();
     child->ticks = child->weight; 
@@ -228,6 +242,9 @@ pid_t task_fork() {
     list_init(&child->children);
     list_node_init(&child->sibling);
     list_node_init(&child->node);
+
+    // 红黑树内部在插入前会初始化节点，这里清零以防万一
+    memset(&child->cfs_node, 0, sizeof(child->cfs_node));
 
     // 4. 内存空间深拷贝
     // 必须为子进程分配独立的 vmap 结构，但初始内容继承自父进程

@@ -4,7 +4,7 @@
 #include <xjos/types.h>
 #include <fs/fs.h>
 #include <xjos/list.h>
-#include <xjos/spinlock.h>
+#include <xjos/mutex.h>
 
 #define BLOCK_SECS (BLOCK_SIZE / SECTOR_SIZE) // 1 block = 2 sectors
 
@@ -19,7 +19,7 @@ typedef struct buffer_t {
     list_node_t lru_node;   // node for free_list(clean & idle)
     list_node_t dirty_node; // node for dirty_list(all dirty buffers) 
 
-    spinlock_t lock; // todo: spinlock for buffer
+    mutex_t lock;    // buffer lock
     bool dirty;    // has been modified
     bool valid;    // has been read from disk
 } buffer_t;

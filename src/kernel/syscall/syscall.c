@@ -98,6 +98,21 @@ int32 write(fd_t fd, const char *buf, u32 len) {
 }
 
 
+fd_t open(char *filename, int flags, int mode) {
+    return _syscall3(SYS_NR_OPEN, (u32)filename, flags, mode);
+}
+
+
+fd_t creat(char *filename, int mode) {
+    return _syscall2(SYS_NR_CREAT, (u32)filename, (u32)mode);
+}
+
+
+void close(fd_t fd) {
+    _syscall1(SYS_NR_CLOSE, fd);
+}
+
+
 int mkdir(char *pathname, mode_t mode) {
     return _syscall2(SYS_NR_MKDIR, (u32)pathname, (u32)mode);
 }

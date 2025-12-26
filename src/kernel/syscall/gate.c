@@ -69,6 +69,10 @@ extern int sys_rmdir();
 extern int sys_link();
 extern int sys_unlink();
 
+extern int sys_create();
+extern fd_t sys_open();
+extern void sys_close();
+
 extern time_t sys_time();
 
 void syscall_init() {
@@ -88,6 +92,10 @@ void syscall_init() {
     syscall_table[SYS_NR_FORK] = task_fork;
 
     syscall_table[SYS_NR_BRK] = sys_brk;
+
+    syscall_table[SYS_NR_OPEN] = sys_open;
+    syscall_table[SYS_NR_CLOSE] = sys_close;
+    syscall_table[SYS_NR_CREAT] = sys_create;
 
     syscall_table[SYS_NR_MKDIR] = sys_mkdir;
     syscall_table[SYS_NR_RMDIR] = sys_rmdir;

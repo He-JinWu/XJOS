@@ -91,6 +91,7 @@ static buffer_t *get_new_buffer() {
         bf->count = 0;
         bf->dirty = false;
         bf->valid = false;
+        mutex_init(&bf->lock);
         
         buffer_count++;
         buffer_ptr++;
@@ -138,7 +139,6 @@ buffer_t *getblk(dev_t dev, idx_t block) {
     buffer_t *bf = get_from_hash_table(dev, block);
     if (bf) {
         // cache hit
-        assert(bf->valid);
         bf->count++;
         if (bf->count == 1) {
             // 被复用
@@ -168,25 +168,37 @@ buffer_t *bread(dev_t dev, idx_t block) {
     if (bf->valid)
         return bf;
 
-    // read disk
-    device_request(bf->dev, bf->data, BLOCK_SECS, bf->block * BLOCK_SECS, 0, REQ_READ);
+    mutex_lock(&bf->lock);
+    if (!bf->valid) {
+        // read disk
+        device_request(bf->dev, bf->data, BLOCK_SECS, bf->block * BLOCK_SECS, 0, REQ_READ);
 
-    bf->dirty = false;
-    bf->valid = true;
+        bf->dirty = false;
+        bf->valid = true;
+    }
+
+    mutex_unlock(&bf->lock);
     return bf;
 }
 
 
 void bwrite(buffer_t *bf) {
     assert(bf);
-    if (!bf->dirty)     // no need to write
+
+    mutex_lock(&bf->lock);
+
+    if (!bf->dirty) {     // no need to write
+        mutex_unlock(&bf->lock);
         return;
+    }
 
     // write to disk
     device_request(bf->dev, bf->data, BLOCK_SECS, bf->block * BLOCK_SECS, 0, REQ_WRITE);
 
     bdirty(bf, false);
     bf->valid = true;
+
+    mutex_unlock(&bf->lock);
 } 
 
 

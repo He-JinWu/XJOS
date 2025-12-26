@@ -28,6 +28,9 @@ void idle_thread() {
 
 
 static void user_init_thread() {
+    fd_t fd = open("/world.txt", O_CREAT | O_RDWR, 0755);
+    close(fd);
+
     while (true) {
         sleep(1000);
     }
@@ -43,8 +46,7 @@ void init_thread() {
 void test_thread() {
     set_interrupt_state(true);
     while (true) {
-        test();
-        sleep(10);
+        sleep(1000);
     }
 }
 
