@@ -223,7 +223,7 @@ rollback:
     return ret;
 }
 
-static int devmkfs(dev_t dev, u32 icount) {
+int devmkfs(dev_t dev, u32 icount) {
     super_block_t *sb = NULL;
     buffer_t *buf = NULL;
     int ret = EOF;
@@ -334,18 +334,18 @@ static int devmkfs(dev_t dev, u32 icount) {
     iroot->desc->nlinks = 2;
 
     buf = bread(dev, bmap(iroot, 0, true));
-    bdirty(buf, true);
-
+    
     dentry_t *entry = (dirent_t *)buf->data;
     memset(entry, 0, BLOCK_SIZE);
-
+    
     strcpy(entry->name, ".");
     entry->nr = iroot->nr;
     entry++;
-
+    
     strcpy(entry->name, "..");
     entry->nr = iroot->nr;
-
+    
+    bdirty(buf, true);
     brelse(buf);
     ret = 0;
 rollback:

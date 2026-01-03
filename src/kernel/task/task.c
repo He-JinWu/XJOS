@@ -21,6 +21,7 @@ extern u32 volatile jiffies;
 extern u32 jiffy;
 extern bitmap_t kernel_map;
 extern tss_t tss;
+extern file_t file_table[];
 
 extern void task_switch(task_t *next);
 extern void interrupt_exit();
@@ -295,7 +296,14 @@ static task_t *task_create(target_t target, const char *name, int nice, u32 uid)
     task->pwd = kmalloc(MAX_PATH_LEN);
     strcpy(task->pwd, "/");
     
-    task->umask = 0022; 
+    task->umask = 0022;
+    
+    task->files[STDIN_FILENO] = &file_table[STDIN_FILENO];
+    task->files[STDOUT_FILENO] = &file_table[STDOUT_FILENO];
+    task->files[STDERR_FILENO] = &file_table[STDERR_FILENO];
+    file_table[STDIN_FILENO].count++;
+    file_table[STDOUT_FILENO].count++;
+    file_table[STDERR_FILENO].count++;
 
     task->nice = nice;
     task->weight = sched_nice_to_weight(nice);
@@ -479,10 +487,8 @@ pid_t sys_getppid() { return running_task()->ppid; }
 
 fd_t task_get_fd(task_t *task) {
     fd_t i;
-    /**
-     * 0,1,2 stdin,stdout,stderr
-     */
-    for (i = 3; i < TASK_FILE_NR; i++) {
+    
+    for (i = 0; i < TASK_FILE_NR; i++) {
         if (!task->files[i])
             break;
     }
@@ -495,8 +501,8 @@ fd_t task_get_fd(task_t *task) {
 }
 
 void task_put_fd(task_t *task, fd_t fd) {
-    if (fd < 3)
-        return;
+    // if (fd < 3)  // 内核不应该替进程做决定
+    //     return;
     
     assert(fd < TASK_FILE_NR);
     task->files[fd] = NULL;

@@ -19,7 +19,8 @@ enum device_subtype_t {
     DEV_CONSOLE = 1,    // console
     DEV_KEYBOARD,       // keyboard
     DEV_IDE_DISK,       // IDE disk
-    DEV_IDE_PART        // IDE disk part
+    DEV_IDE_PART,        // IDE disk part
+    DEV_RAMDISK,      // ramdisk
 };
 
 // device commands

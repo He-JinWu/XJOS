@@ -3,6 +3,8 @@
 #include <libc/assert.h>
 #include <xjos/task.h>
 #include <drivers/device.h>
+#include <xjos/syscall.h>
+#include <fs/stat.h>
 
 
 #define FILE_NR 128
@@ -81,11 +83,6 @@ int sys_create(char *filename, int mode) {
 
 
 int sys_read(fd_t fd, char *buf, int len) {
-    if (fd == stdin) {
-        device_t *device = device_find(DEV_KEYBOARD, 0);
-        return device_read(device->dev, buf, len, 0, 0);
-    }
-
     // no stdin other files
 
     if (fd < 0 || fd >= TASK_FILE_NR)
@@ -97,26 +94,38 @@ int sys_read(fd_t fd, char *buf, int len) {
         return EOF;
     if (len <= 0)
         return EOF;
+    int r_len = 0;
 
     if ((file->flags & O_ACCMODE) == O_WRONLY)
         return EOF;
 
     inode_t *inode = file->inode;
-    int len_inode = inode_read(inode, buf, len, file->offset);
-    if (len_inode != EOF) {
-        file->offset += len_inode;
+    
+    // 1. 多态分发
+    if (ISCHR(inode->desc->mode)) {
+        assert(inode->desc->zones[0]);
+        r_len = device_read(inode->desc->zones[0], buf, len, 0, 0);
+    } else if (ISBLK(inode->desc->mode)) {
+        assert(inode->desc->zones[0]);
+        
+        device_t *device = device_get(inode->desc->zones[0]);
+        assert(file->offset % BLOCK_SIZE == 0);
+        assert(len % BLOCK_SIZE == 0);
+
+        r_len = device_read(inode->desc->zones[0], buf, len, file->offset / BLOCK_SIZE, 0);
+    } else {
+        r_len = inode_read(inode, buf, len, file->offset);
     }
 
-    return len_inode;
+    // 2.统一更新
+    if (r_len > 0)
+        file->offset += r_len;
+
+    return r_len;
 }
 
 
 int sys_write(fd_t fd, char *buf, int len) {
-    if (fd == stdout || fd == stderr) {
-        device_t *device = device_find(DEV_CONSOLE, 0);
-        return device_write(device->dev, buf, len, 0, 0);
-    }
-
     if (fd < 0 || fd >= TASK_FILE_NR)
         return EOF;
 
@@ -130,13 +139,29 @@ int sys_write(fd_t fd, char *buf, int len) {
     if ((file->flags & O_ACCMODE) == O_RDONLY)
         return EOF;
     
+    int w_len = 0;
     inode_t *inode = file->inode;
-    int len_inode = inode_write(inode, buf, len, file->offset);
-    if (len_inode != EOF) {
-        file->offset += len_inode;
-    }   
+    assert(inode);
 
-    return len_inode;
+    if (ISCHR(inode->desc->mode)) {
+        assert(inode->desc->zones[0]);
+        w_len = device_write(inode->desc->zones[0], buf, len, 0, 0);
+    } else if (ISBLK(inode->desc->mode)) {
+        assert(inode->desc->zones[0]);
+        
+        device_t *device = device_get(inode->desc->zones[0]);
+        assert(file->offset % BLOCK_SIZE == 0);
+        assert(len % BLOCK_SIZE == 0);
+
+        w_len = device_write(inode->desc->zones[0], buf, len, file->offset / BLOCK_SIZE, 0);
+    } else {
+        w_len = inode_write(inode, buf, len, file->offset);
+    }
+
+    if (w_len > 0)
+        file->offset += w_len;
+
+    return w_len;
 }
 
 

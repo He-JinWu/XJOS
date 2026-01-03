@@ -10,6 +10,7 @@ extern void syscall_init();
 extern void keyboard_init();
 extern void tss_init();
 extern void ide_init();
+extern void ramdisk_init();
 extern void buffer_init();
 extern void file_init();
 extern void super_init();
@@ -32,7 +33,8 @@ void kernel_init() {
     clock_init();
     keyboard_init();
     time_init();
-    ide_init();   
+    ide_init();
+    ramdisk_init();   
     syscall_init();
 
     buffer_init(); 
